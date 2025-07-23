@@ -121,7 +121,7 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
      * @param string $name1Pattern The object name (host name or hostgroup name or servicegroup name)
      * @param string $name2Pattern Service name for a object type service
      * @return array
-     * @throws BackendException *
+     * @throws BackendException
      */
     public function getObjects($type, $name1Pattern = '', $name2Pattern = '') {
         $ret = array();
@@ -208,9 +208,9 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
      * @return array
      */
     public function getHostState($objects, $options, $filters) {
-	if (empty($objects)) {
-     	   return array(); // Empêche une clause SQL invalide du type IN ()
-    	}
+        if (empty($objects)) {
+            return array(); // Empêche une clause SQL invalide du type IN ()
+        }
         $queryGetHostState = 'SELECT
             h.name AS alias,
             h.name,
@@ -334,11 +334,19 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         return $arrReturn;
     }
 
+    /**
+     * Get service state object
+     *
+     * @param type $objects
+     * @param type $options
+     * @param type $filters
+     * @return array
+     */
     public function getServiceState($objects, $options, $filters) {
         if (empty($objects)) {
-        	return array(); // Empêche une clause SQL invalide du type IN ()
-    	}
-	$queryGetServiceState = 'SELECT
+            return array(); 
+        }
+        $queryGetServiceState = 'SELECT
             h.host_id,
             h.name,
             h.address,
@@ -423,8 +431,6 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
             /* Unchecked state */
             if ($row['has_been_checked'] == '0' || $row['current_state'] == '') {
                 $svc = array_fill(0, EXT_STATE_SIZE, null);
-                //$svc[DESCRIPTION]  = $e[0];
-                //$svc[DISPLAY_NAME] = $e[1];
                 $svc[STATE]  = PENDING;
                 $svc[OUTPUT] = l('serviceNotChecked', Array('SERVICE' => $row['service_description']));
             } else {
@@ -485,11 +491,19 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         return $listStates;
     }
 
+    /**
+     * Get host member counts
+     *
+     * @param type $objects
+     * @param type $options
+     * @param type $filters
+     * @return array
+     */
     public function getHostMemberCounts($objects, $options, $filters) {
         if (empty($objects)) {
-        	return array(); // Empêche une clause SQL invalide du type IN ()
-    	}
-	if($options & 1) {
+            return array(); // Empêche une clause SQL invalide du type IN ()
+        }
+        if($options & 1) {
             $stateAttr = 'IF((s.state_type = 0), s.last_hard_state, s.state)';
         } else {
             $stateAttr = 's.state';
@@ -527,7 +541,6 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         $counts = array();
         while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
             $counts[$row['name']] = array(
-                //'details' => array(ALIAS => $row['alias']),
                 'counts' => array(
                     PENDING => array(
                         'normal' => intval($row['pending']),
@@ -557,8 +570,16 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         return $counts;
     }
 
+    /**
+     * Get hostgroup state counts
+     *
+     * @param type $objects
+     * @param type $options
+     * @param type $filters
+     * @return array
+     */
     public function getHostgroupStateCounts($objects, $options, $filters) {
-	if (empty($objects)) {
+        if (empty($objects)) {
             return array(); // Empêche une clause SQL invalide du type AND ()
         }
         if($options & 1) {
@@ -683,8 +704,16 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         return $counts;
     }
 
+    /**
+     * Get servicegroup state counts
+     *
+     * @param type $objects
+     * @param type $options
+     * @param type $filters
+     * @return array
+     */
     public function getServicegroupStateCounts($objects, $options, $filters) {
-	if (empty($objects)) {
+        if (empty($objects)) {
             return array(); // Empêche une clause SQL invalide du type AND ()
         }
         if($options & 1) {
@@ -754,72 +783,92 @@ class GlobalBackendcentreonbroker implements GlobalBackendInterface {
         return $counts;
     }
 
-public function getHostNamesWithNoParent() {
-    $queryNoParents = 'SELECT h.name
-        FROM hosts h
-        WHERE h.enabled = 1
-        AND NOT EXISTS (
-            SELECT 1
-            FROM hosts_hosts_parents hp
-            WHERE hp.child_id = h.host_id
-        )';
+    /**
+     * Get host names with no parent
+     *
+     * @return array
+     * @throws BackendException
+     */
+    public function getHostNamesWithNoParent() {
+        $queryNoParents = 'SELECT h.name
+            FROM hosts h
+            WHERE h.enabled = 1
+            AND NOT EXISTS (
+                SELECT 1
+                FROM hosts_hosts_parents hp
+                WHERE hp.child_id = h.host_id
+            )';
 
-    if ($this->_instanceId != 0) {
-        $queryNoParents .= ' AND h.instance_id = :instanceId';
-    }
-
-    try {
-        $stmt = $this->_dbh->prepare($queryNoParents);
         if ($this->_instanceId != 0) {
-            $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            $queryNoParents .= ' AND h.instance_id = :instanceId';
         }
-        $stmt->execute();
-    } catch (PDOException $e) {
-        throw new BackendException(l('errorGettingHostNamesWithNoParent', [
-            'BACKENDID' => $this->_backendId,
-            'ERROR' => $e->getMessage()
-        ]));
+
+        try {
+            $stmt = $this->_dbh->prepare($queryNoParents);
+            if ($this->_instanceId != 0) {
+                $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw new BackendException(l('errorGettingHostNamesWithNoParent', [
+                'BACKENDID' => $this->_backendId,
+                'ERROR' => $e->getMessage()
+            ]));
+        }
+
+        $noParents = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $noParents[] = $row['name'];
+        }
+        return $noParents;
     }
 
-    $noParents = [];
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $noParents[] = $row['name'];
-    }
-    return $noParents;
-}
-public function getDirectChildNamesByHostName($hostname) {
-    $query = 'SELECT h.name
-        FROM hosts h
-        JOIN hosts_hosts_parents hp ON h.host_id = hp.child_id
-        JOIN hosts parent ON hp.parent_id = parent.host_id
-        WHERE h.enabled = 1 AND parent.name = :hostname';
+    /**
+     * Get direct child names by host name
+     *
+     * @param string $hostname
+     * @return array
+     * @throws BackendException
+     */
+    public function getDirectChildNamesByHostName($hostname) {
+        $query = 'SELECT h.name
+            FROM hosts h
+            JOIN hosts_hosts_parents hp ON h.host_id = hp.child_id
+            JOIN hosts parent ON hp.parent_id = parent.host_id
+            WHERE h.enabled = 1 AND parent.name = :hostname';
 
-    if ($this->_instanceId != 0) {
-        $query .= ' AND h.instance_id = :instanceId';
-    }
-
-    try {
-        $stmt = $this->_dbh->prepare($query);
-        $stmt->bindValue(':hostname', $hostname, PDO::PARAM_STR);
         if ($this->_instanceId != 0) {
-            $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            $query .= ' AND h.instance_id = :instanceId';
         }
-        $stmt->execute();
-    } catch (PDOException $e) {
-        throw new BackendException(l('errorGettingDirectChildNamesByHostName', [
-            'BACKENDID' => $this->_backendId,
-            'ERROR' => $e->getMessage()
-        ]));
+
+        try {
+            $stmt = $this->_dbh->prepare($query);
+            $stmt->bindValue(':hostname', $hostname, PDO::PARAM_STR);
+            if ($this->_instanceId != 0) {
+                $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+        } catch (PDOException $e) {
+            throw new BackendException(l('errorGettingDirectChildNamesByHostName', [
+                'BACKENDID' => $this->_backendId,
+                'ERROR' => $e->getMessage()
+            ]));
+        }
+
+        $childs = [];
+        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $childs[] = $row['name'];
+        }
+        return $childs;
     }
 
-    $childs = [];
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $childs[] = $row['name'];
-    }
-    return $childs;
-}
-
-
+    /**
+     * Get direct parent names by host name
+     *
+     * @param string $hostname
+     * @return array
+     * @throws BackendException
+     */
     public function getDirectParentNamesByHostName($hostname) {
         $queryGetParents = 'SELECT h.name
             FROM hosts h, hosts_hosts_parents hp
@@ -853,6 +902,13 @@ public function getDirectChildNamesByHostName($hostname) {
         return $parents;
     }
 
+    /**
+     * Get host acknowledgement status by host ID
+     *
+     * @param int $hostId
+     * @return int
+     * @throws BackendException
+     */
     private function getHostAckByHost($hostId) {
         if (isset($this->_cacheHostAck[$hostId])) {
             return $this->_cacheHostAck[$hostId];
@@ -882,28 +938,43 @@ public function getDirectChildNamesByHostName($hostname) {
         $this->_cacheHostAck[$hostId] = $return;
         return $this->_cacheHostAck[$hostId];
     }
+
+    /**
+     * Get program start time
+     *
+     * @return int
+     */
     public function getProgramStart() {
-	 $sql = 'SELECT UNIX_TIMESTAMP(start_time) AS program_start
-	            FROM instances
-        	    WHERE instance_id = :instance';
+        $sql = 'SELECT UNIX_TIMESTAMP(start_time) AS program_start
+                FROM instances
+                WHERE instance_id = :instance';
 
-   	$stmt = $this->_dbh->prepare($sql);
-   	 $stmt->bindValue(':instance', $this->_instanceId, PDO::PARAM_INT);
-   	 $stmt->execute();
+        $stmt = $this->_dbh->prepare($sql);
+        $stmt->bindValue(':instance', $this->_instanceId, PDO::PARAM_INT);
+        $stmt->execute();
 
-  	 $data = $stmt->fetch(PDO::FETCH_ASSOC);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
-   	 if ($data !== false && is_numeric($data['program_start'])) {
-        	return intval($data['program_start']);
-   	 } else {
-        	return -1;
-   	 }
-	}
+        if ($data !== false && is_numeric($data['program_start'])) {
+            return intval($data['program_start']);
+        } else {
+            return -1;
+        }
+    }
 
+    /**
+     * Parse filter conditions
+     *
+     * @param array $objects
+     * @param array $filters
+     * @param string $tableAlias
+     * @return string
+     * @throws BackendException
+     */
     private function parseFilter($objects, $filters, $tableAlias = 'h') {
-	if (empty($objects) || empty($filters)) {
-        	return '1=1';
-    	}
+        if (empty($objects) || empty($filters)) {
+            return '1=1';
+        }
         $listKeys = array(
             'host_name',
             'host_groups',
@@ -936,7 +1007,6 @@ public function getDirectChildNamesByHostName($hostname) {
                 }
                 $objFilters[] = $key . ' ' . $op . ' ' . $this->_dbh->quote($val);
             }
-
 
             $allFilters[] = join(' AND ', $objFilters);
         }
@@ -978,132 +1048,145 @@ public function getDirectChildNamesByHostName($hostname) {
      * @throws BackendException
      */
     private function loadInstanceId() {
-    $this->_instanceId = 0; // Default value
-    
-    try {
-        $stmt = $this->_dbh->prepare("SELECT instance_id
-                        FROM instances
-                        WHERE name = :name");
-        $stmt->bindParam(':name', $this->_dbinstancename, PDO::PARAM_STR);
-        $stmt->execute();
+        $this->_instanceId = 0; // Default value
         
-        if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $this->_instanceId = filter_var($row['instance_id'], FILTER_VALIDATE_INT, ['options' => ['default' => 0]]);
-        } else {
-            // Log warning if instance name was specified but not found
-            if ($this->_dbinstancename !== 'default') {
-                error_log("Instance '{$this->_dbinstancename}' not found, using default");
+        try {
+            $stmt = $this->_dbh->prepare("SELECT instance_id
+                            FROM instances
+                            WHERE name = :name");
+            $stmt->bindParam(':name', $this->_dbinstancename, PDO::PARAM_STR);
+            $stmt->execute();
+            
+            if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $this->_instanceId = filter_var($row['instance_id'], FILTER_VALIDATE_INT, ['options' => ['default' => 0]]);
+            } else {
+                // Log warning if instance name was specified but not found
+                if ($this->_dbinstancename !== 'default') {
+                    error_log("Instance '{$this->_dbinstancename}' not found, using default");
+                }
             }
+        } catch (PDOException $e) {
+            // Log error but continue with default instance
+            error_log("Failed to load instance ID: " . $e->getMessage());
         }
-    } catch (PDOException $e) {
-        // Log error but continue with default instance
-        error_log("Failed to load instance ID: " . $e->getMessage());
-        // Optionally rethrow if critical for your application
-        // throw new BackendException('errorLoadingInstanceId', array(
-        //     'BACKENDID' => $this->_backendId, 
-        //     'ERROR' => $e->getMessage()
-        // )));
     }
 
-}
-
-public function getHostNamesInHostgroup($name) {
-    $query = 'SELECT h.name
-        FROM hosts h
-        JOIN hosts_hostgroups hhg ON h.host_id = hhg.host_id
-        JOIN hostgroups hg ON hhg.hostgroup_id = hg.hostgroup_id
-        WHERE hg.name = :name AND h.enabled = 1';
-    
-    if ($this->_instanceId != 0) {
-        $query .= ' AND h.instance_id = :instanceId';
-    }
-
-    try {
-        $stmt = $this->_dbh->prepare($query);
-        $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+    /**
+     * Get host names in hostgroup
+     *
+     * @param string $name
+     * @return array
+     * @throws BackendException
+     */
+    public function getHostNamesInHostgroup($name) {
+        $query = 'SELECT h.name
+            FROM hosts h
+            JOIN hosts_hostgroups hhg ON h.host_id = hhg.host_id
+            JOIN hostgroups hg ON hhg.hostgroup_id = hg.hostgroup_id
+            WHERE hg.name = :name AND h.enabled = 1';
+        
         if ($this->_instanceId != 0) {
-            $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            $query .= ' AND h.instance_id = :instanceId';
         }
-        $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-    } catch (PDOException $e) {
-        throw new BackendException(l('errorGettingHostgroupMembers', [
-            'BACKENDID' => $this->_backendId, 
-            'ERROR' => $e->getMessage()
-        ]));
-    }
-}
 
-public function getHostNamesProblematic() {
-    $problemHosts = [];
-    
-    // Hosts not UP
-    $queryHosts = 'SELECT name FROM hosts 
-        WHERE enabled = 1 AND state != 0';
-    if ($this->_instanceId != 0) {
-        $queryHosts .= ' AND instance_id = :instanceId';
-    }
-    
-    try {
-        $stmt = $this->_dbh->prepare($queryHosts);
-        if ($this->_instanceId != 0) {
-            $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
-        }
-        $stmt->execute();
-        $problemHosts = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-    } catch (PDOException $e) {
-        // Log error but continue
-        error_log("Error fetching problematic hosts: " . $e->getMessage());
-    }
-    
-    // Services not OK
-    $queryServices = 'SELECT DISTINCT h.name 
-        FROM services s
-        JOIN hosts h ON s.host_id = h.host_id
-        WHERE s.enabled = 1 AND h.enabled = 1 AND s.state != 0';
-    if ($this->_instanceId != 0) {
-        $queryServices .= ' AND h.instance_id = :instanceId';
-    }
-    
-    try {
-        $stmt = $this->_dbh->prepare($queryServices);
-        if ($this->_instanceId != 0) {
-            $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
-        }
-        $stmt->execute();
-        $problemServices = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
-        return array_unique(array_merge($problemHosts, $problemServices));
-    } catch (PDOException $e) {
-        throw new BackendException(l('errorGettingProblematicHosts', [
-            'BACKENDID' => $this->_backendId, 
-            'ERROR' => $e->getMessage()
-        ]));
-    }
-}
-
-public function getContactsWithGroups() {
-    $query = 'SELECT c.contact_name, cg.cg_name
-        FROM contact c
-        JOIN contactgroup_contact_relation cgr ON c.contact_id = cgr.contact_id
-        JOIN contactgroup cg ON cgr.contactgroup_cg_id = cg.cg_id';
-    
-    try {
-        $stmt = $this->_dbh->query($query);
-        $contacts = [];
-        while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-            $contact = $row['contact_name'];
-            $group = $row['cg_name'];
-            if (!isset($contacts[$contact])) {
-                $contacts[$contact] = [];
+        try {
+            $stmt = $this->_dbh->prepare($query);
+            $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+            if ($this->_instanceId != 0) {
+                $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
             }
-            $contacts[$contact][] = $group;
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+        } catch (PDOException $e) {
+            throw new BackendException(l('errorGettingHostgroupMembers', [
+                'BACKENDID' => $this->_backendId, 
+                'ERROR' => $e->getMessage()
+            ]));
         }
-        return $contacts;
-    } catch (PDOException $e) {
-        throw new BackendException(l('errorGettingContacts', [
-            'BACKENDID' => $this->_backendId, 
-            'ERROR' => $e->getMessage()
-        ]));
     }
-}
+
+    /**
+     * Get problematic host names
+     *
+     * @return array
+     * @throws BackendException
+     */
+    public function getHostNamesProblematic() {
+        $problemHosts = [];
+        
+        // Hosts not UP
+        $queryHosts = 'SELECT name FROM hosts 
+            WHERE enabled = 1 AND state != 0';
+        if ($this->_instanceId != 0) {
+            $queryHosts .= ' AND instance_id = :instanceId';
+        }
+        
+        try {
+            $stmt = $this->_dbh->prepare($queryHosts);
+            if ($this->_instanceId != 0) {
+                $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $problemHosts = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+        } catch (PDOException $e) {
+            // Log error but continue
+            error_log("Error fetching problematic hosts: " . $e->getMessage());
+        }
+        
+        // Services not OK
+        $queryServices = 'SELECT DISTINCT h.name 
+            FROM services s
+            JOIN hosts h ON s.host_id = h.host_id
+            WHERE s.enabled = 1 AND h.enabled = 1 AND s.state != 0';
+        if ($this->_instanceId != 0) {
+            $queryServices .= ' AND h.instance_id = :instanceId';
+        }
+        
+        try {
+            $stmt = $this->_dbh->prepare($queryServices);
+            if ($this->_instanceId != 0) {
+                $stmt->bindValue(':instanceId', $this->_instanceId, PDO::PARAM_INT);
+            }
+            $stmt->execute();
+            $problemServices = $stmt->fetchAll(PDO::FETCH_COLUMN, 0);
+            return array_unique(array_merge($problemHosts, $problemServices));
+        } catch (PDOException $e) {
+            throw new BackendException(l('errorGettingProblematicHosts', [
+                'BACKENDID' => $this->_backendId, 
+                'ERROR' => $e->getMessage()
+            ]));
+        }
+    }
+
+    /**
+     * Get contacts with their groups
+     *
+     * @return array
+     * @throws BackendException
+     */
+    public function getContactsWithGroups() {
+        $query = 'SELECT c.contact_name, cg.cg_name
+            FROM contact c
+            JOIN contactgroup_contact_relation cgr ON c.contact_id = cgr.contact_id
+            JOIN contactgroup cg ON cgr.contactgroup_cg_id = cg.cg_id';
+        
+        try {
+            $stmt = $this->_dbh->query($query);
+            $contacts = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $contact = $row['contact_name'];
+                $group = $row['cg_name'];
+                if (!isset($contacts[$contact])) {
+                    $contacts[$contact] = [];
+                }
+                $contacts[$contact][] = $group;
+            }
+            return $contacts;
+        } catch (PDOException $e) {
+            throw new BackendException(l('errorGettingContacts', [
+                'BACKENDID' => $this->_backendId, 
+                'ERROR' => $e->getMessage()
+            ]));
+        }
+    }
 }
